@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blackjack 21</title>
+<style>
+:root{--felt:#14423a;--felt2:#0d2e29;--ink:#1b1b1f;--paper:#f7f3ea;--red:#c8342b;--gold:#e9b949}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:"Kanit","Noto Sans Thai",system-ui,sans-serif;color:var(--paper);
+  background:radial-gradient(ellipse at center,var(--felt),var(--felt2));display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:16px;overflow:hidden}
+button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:12px 22px;font-weight:600}
+input{font:inherit;padding:12px;border-radius:10px;border:0;width:100%;margin-bottom:10px}
+button:focus-visible,input:focus-visible{outline:3px solid var(--gold)}
+#lobby,#game{width:100%;max-width:640px}
+#lobby{margin:auto;max-width:320px}
+h1{margin:0 0 14px;font-size:34px}
+.gold{background:var(--gold);color:var(--ink)}
+#seats{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.seat{background:#0006;border:2px solid transparent;border-radius:12px;padding:8px 10px;min-width:140px;text-align:center;transition:border-color .2s,background .2s}
+.seat.turn{border-color:var(--gold);background:#0009}
+.seat.me b::after{content:" (คุณ)";font-weight:400;opacity:.7}
+.turn-label{display:block;min-height:16px;font-size:11px;line-height:16px;color:transparent}
+.seat.turn .turn-label{color:var(--gold)}
+.hand{display:flex;justify-content:center;align-items:flex-start;height:58px;max-width:100%;overflow-x:auto;margin:5px auto 0;padding:2px 4px}
+.mini-card{flex:0 0 40px;width:40px;height:54px;margin-left:-17px;border:1px solid #d9d3c7;border-radius:5px;background:var(--paper);color:var(--ink);box-shadow:0 2px 5px #0008;position:relative;font-weight:700;font-size:12px}
+.mini-card:first-child{margin-left:0}
+.mini-card i,.card i{position:absolute;top:5px;left:5px;font-size:12px;font-style:normal;line-height:1}
+.mini-card span{position:absolute;inset:0;display:grid;place-items:center;font-size:16px}
+.mini-card.r,.card.r{color:var(--red)}
+.mini-card.back{background:repeating-linear-gradient(45deg,#185449 0 3px,#287363 3px 6px);border:2px solid var(--paper)}
+.score{display:block;min-height:18px;font-size:13px;font-weight:700}
+#table{position:relative;height:270px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;margin:auto}
+#dealer{text-align:center}
+#dealer-label{display:block;font-size:14px;margin-bottom:6px}
+.dealer-hand{display:flex;justify-content:center;gap:8px;min-height:112px}
+.dealer-total{font-size:14px;min-height:20px}
+.card{width:120px;height:170px;background:var(--paper);color:var(--ink);border-radius:12px;box-shadow:0 6px 18px #0008;display:flex;align-items:center;justify-content:center;font-size:44px;font-weight:700;position:relative}
+.card i{top:8px;left:10px;font-size:20px}
+.card.back{background:repeating-linear-gradient(45deg,#185449 0 6px,#287363 6px 12px);border:4px solid var(--paper)}
+.card.jack{box-shadow:0 0 0 4px var(--gold),0 0 32px var(--gold)}
+#msg{text-align:center;min-height:28px;font-size:18px}
+#btns{display:flex;gap:12px;justify-content:center}
+#btns button{flex:1;max-width:220px;font-size:20px;padding:16px}
+#stand{background:#e3e0d8;color:var(--ink)}
+button:disabled{opacity:.4;cursor:default}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+<div id="lobby">
+  <h1>Blackjack 21</h1>
+  <input id="name" placeholder="ชื่อของคุณ" maxlength="14">
+  <input id="room" placeholder="รหัสห้อง (เช่น ABC)" maxlength="12">
+  <button class="gold" id="join" style="width:100%">เข้าห้อง</button>
+  <p id="err" style="color:#ffb4ab"></p>
+</div>
+
+<div id="game" hidden>
+  <div id="seats"></div>
+  <div id="table"><div id="dealer"></div></div>
+  <div id="msg"></div>
+  <div id="btns">
+    <button id="hit" class="gold">จั่วไพ่ (Space)</button>
+    <button id="stand">หยุด (Enter)</button>
+  </div>
+  <div style="text-align:center;margin-top:12px"><button id="start" class="gold">เริ่มเกม</button></div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let ws, S = null;
+const send = o => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
+
+$('#join').onclick = () => {
+  const name = $('#name').value.trim(), room = $('#room').value.trim();
+  if (!name || !room) return $('#err').textContent = 'ใส่ชื่อและรหัสห้อง';
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+  ws.onopen = () => send({ t: 'join', name, room });
+  ws.onmessage = e => on(JSON.parse(e.data));
+  ws.onclose = () => { $('#msg').textContent = 'การเชื่อมต่อหลุด รีเฟรชหน้าเพื่อเข้าใหม่'; };
+};
+$('#hit').onclick = () => send({ t: 'hit' });
+$('#stand').onclick = () => send({ t: 'stand' });
+$('#start').onclick = () => send({ t: 'start' });
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); send({ t: 'hit' }); }
+  if (e.code === 'Enter') send({ t: 'stand' });
+});
+
+function cardEl(c, mini = false) {
+  const d = document.createElement('div');
+  d.className = (mini ? 'mini-card' : 'card') + (!c ? ' back' : '') + (c && /[♥♦]/.test(c) ? ' r' : '');
+  if (!c) return d;
+  const rank = c.slice(0, -1), suit = c.slice(-1), label = rank + suit;
+  const corner = document.createElement('i'), face = document.createElement('span');
+  corner.textContent = label;
+  face.textContent = label;
+  d.append(corner, face);
+  return d;
+}
+const seatEl = i => document.querySelector(`.seat[data-i="${i}"]`);
+
+function on(m) {
+  if (m.t === 'err') { $('#err').textContent = m.msg; $('#lobby').hidden = false; $('#game').hidden = true; ws.close(); return; }
+  if (m.t !== 'state') return;
+  S = m;
+  $('#lobby').hidden = true; $('#game').hidden = false;
+  render();
+  animate(m.ev);
+}
+
+function render() {
+  $('#seats').innerHTML = S.players.map((p, i) => {
+    const isTurn = S.phase === 'players' && i === S.turn;
+    const status = p.result || (p.status === 'bust' ? 'เกิน 21' : p.status === 'blackjack' ? 'แบล็กแจ็ก' :
+      p.status === 'stood' ? 'หยุดแล้ว' : isTurn ? 'ตาคุณ' : S.phase === 'players' ? 'รอเล่น' : '');
+    return `<div class="seat${isTurn ? ' turn' : ''}${i === S.me ? ' me' : ''}" data-i="${i}"${isTurn ? ' aria-current="true"' : ''}><b>${esc(p.name)}</b><span class="turn-label">${status}</span><div class="hand" aria-label="ไพ่ ${p.hand.length} ใบ"></div><span class="score">${p.hand.length ? `${p.total} แต้ม` : ''}</span></div>`;
+  }).join('');
+  S.players.forEach((p, i) => p.hand.forEach(c => seatEl(i).querySelector('.hand').appendChild(cardEl(c, true))));
+  const dealer = $('#dealer');
+  dealer.innerHTML = '<span id="dealer-label">เจ้ามือ</span><div class="dealer-hand"></div><div class="dealer-total"></div>';
+  const dealerHand = dealer.querySelector('.dealer-hand');
+  S.dealer.forEach(c => dealerHand.appendChild(cardEl(c)));
+  dealer.querySelector('.dealer-total').textContent = S.dealer.length ? `${S.dealerTotal} แต้ม${S.phase === 'players' ? ' + ไพ่คว่ำ' : ''}` : '';
+  const myTurn = S.phase === 'players' && S.turn === S.me && S.players[S.me]?.status === 'playing';
+  $('#hit').disabled = !myTurn;
+  $('#stand').disabled = !myTurn;
+  $('#start').hidden = S.phase === 'players';
+  $('#start').textContent = S.phase === 'result' ? 'เริ่มรอบใหม่' : 'เริ่มเกม';
+  $('#msg').textContent = S.phase === 'waiting' ? `ห้อง ${S.code} — กดเริ่มเกมเมื่อพร้อม` :
+    S.phase === 'result' ? `เจ้ามือ ${S.dealerTotal} แต้ม · ${S.players.map(p => `${p.name}: ${p.result} (${p.total})`).join(' · ')}` :
+    myTurn ? 'ตาคุณ — จั่วไพ่หรือหยุด' : `ตา ${S.players[S.turn]?.name || 'เจ้ามือ'}`;
+}
+
+function animate(ev) {
+  if (ev?.k !== 'hit') return;
+  const hand = seatEl(ev.by)?.querySelector('.hand'), lastCard = hand?.lastElementChild;
+  if (lastCard) lastCard.animate([{ transform: 'translateY(-10px)', opacity: 0.4 }, { transform: 'translateY(0)', opacity: 1 }], { duration: 220 });
+}
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+</script>
+</body>
+</html>
