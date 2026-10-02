@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: blackjack-21
+    runtime: node
+    plan: free
+    buildCommand: cp Package.json package.json && npm ci
+    startCommand: npm start
+    healthCheckPath: /
